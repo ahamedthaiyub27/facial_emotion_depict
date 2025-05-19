@@ -1,48 +1,64 @@
 import cv2
 from deepface import DeepFace
 
-# Load face cascade classifier
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Initialize face detector
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
-# Start capturing video
-cap = cv2.VideoCapture(0)
+# Constants
+FRAME_WIDTH = 640
+FRAME_HEIGHT = 480
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+FONT_SCALE = 0.8
+FONT_COLOR = (0, 255, 255)
+BOX_COLOR = (0, 128, 255)
+LINE_THICKNESS = 2
 
-while True:
-    # Capture frame-by-frame
-    ret, frame = cap.read()
+def detect_faces(gray_frame):
+    return face_cascade.detectMultiScale(gray_frame, scaleFactor=1.2, minNeighbors=6, minSize=(80, 80))
 
-    # Convert frame to grayscale
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+def analyze_emotion(face_img):
+    try:
+        result = DeepFace.analyze(face_img, actions=['emotion'], enforce_detection=False)
+        return result[0]['dominant_emotion']
+    except Exception as e:
+        print(f"[Error] DeepFace failed: {e}")
+        return "Unknown"
 
-    # Convert grayscale frame to RGB format
-    rgb_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
+def main():
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
 
-    # Detect faces in the frame
-    faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    print("🔍 Starting Emotion Detection — Press 'q' to quit.")
 
-    for (x, y, w, h) in faces:
-        # Extract the face ROI (Region of Interest)
-        face_roi = rgb_frame[y:y + h, x:x + w]
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print(" Failed to capture frame.")
+            break
 
-        
-        # Perform emotion analysis on the face ROI
-        result = DeepFace.analyze(face_roi, actions=['emotion'], enforce_detection=False)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        faces = detect_faces(gray)
 
-        # Determine the dominant emotion
-        emotion = result[0]['dominant_emotion']
+        for (x, y, w, h) in faces:
+            face_img = rgb[y:y+h, x:x+w]
+            face_img_resized = cv2.resize(face_img, (224, 224))  # DeepFace input size
+            emotion = analyze_emotion(face_img_resized)
 
-        # Draw rectangle around face and label with predicted emotion
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        cv2.putText(frame, emotion, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+            # Draw bounding box and label
+            cv2.rectangle(frame, (x, y), (x+w, y+h), BOX_COLOR, LINE_THICKNESS)
+            cv2.putText(frame, f'Emotion: {emotion}', (x, y - 10), FONT, FONT_SCALE, FONT_COLOR, 2)
+            print(f" Detected Emotion: {emotion}")
 
-    # Display the resulting frame
-    cv2.imshow('Real-time Emotion Detection', frame)
+        cv2.imshow(" Real-time Emotion Recognition", frame)
 
-    # Press 'q' to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-# Release the capture and close all windows
-cap.release()
-cv2.destroyAllWindows()
+    print(" Exiting...")
+    cap.release()
+    cv2.destroyAllWindows()
 
+if __name__ == "__main__":
+    main()
